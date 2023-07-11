@@ -42,9 +42,13 @@ class DomoticzDriver extends Homey.Driver{
         console.log("Initialize driver");
 
         //this.onPollInterval = setInterval(this.onPoll.bind(this), POLL_INTERVAL);
-        this.domoticz = Domoticz.fromSettings(this.homey)
+        //this.domoticz = new Domoticz.fromSettings(this.homey);
+        let settings = this.homey.settings.get("domotics_config");
+        console.log("Settings at onInit: ",settings);
+        
+        const domoticz = new Domoticz(settings);
+        this.domoticz = Domoticz.fromSettings(this.homey);
 
-        const domoticz = new Domoticz('homey','homey123!','192.168.1.21','8080'); // Create an instance of the Domoticz class
         
         this.initInterval();
     }
@@ -87,6 +91,20 @@ class DomoticzDriver extends Homey.Driver{
             });
         });
     **/
+
+        onPoll() {
+            this.getDevices().forEach((d)=>{
+                console.log('Get data for device: '+d.getData().idx);
+                this.getDomoticz().getDeviceData(d.getData().idx).then((result)=>{
+                    console.log("Got device data");
+                    console.log('Data: '+result);
+                    this._updateInternalState(d,result[0]);
+                }).catch((error)=>{
+                    console.log('Unable to retrieve state of device');
+                    console.log(error);
+                });
+            });
+          }
     
         onDeleted() {
             if( this.onPollInterval ) {
@@ -152,9 +170,12 @@ class DomoticzDriver extends Homey.Driver{
            this.validateSettings(data,callback);
         });
 
+        socket.done();
+
         socket.setHandler('list_devices',(data,callback)=>{
             console.log("List new devices");
             this.onPairListDevices(data,callback);
+            socket.emit("success", callback); // test
         });
     }
 
@@ -169,8 +190,8 @@ class DomoticzDriver extends Homey.Driver{
 
             }
             console.log("save settings");
-            this.homey.settings.set('domotics_config',data);
-            //this.saveSettings(data);
+            //this.homey.settings.set('domotics_config',data);
+            this.saveSettings(data);
             callback(null,'OK');
         }).catch((error)=>{
             console.log("Credentials are not correct or domoticz is not reachable!");
@@ -194,7 +215,7 @@ class DomoticzDriver extends Homey.Driver{
     }
 
 
-    retrieveSettings(data,callback){
+    static retrieveSettings(data,callback){
         this.homey = homey;
         console.log("Retrieve current settings from Homey store");
         let settings = this.homey.settings.get('domotics_config');
@@ -349,9 +370,10 @@ class DomoticzDriver extends Homey.Driver{
               }
             });
       
-            console.log("Devices found: ");
-            console.log(devices.length);
-            callback(null, devices);
+            console.log("Devices found: ",devices.length);
+            console.log(devices);
+            //callback(null, devices);
+            return devices;
           })
           .catch((error) => {
             console.log("Error while retrieving devicelist");

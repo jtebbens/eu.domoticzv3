@@ -3,6 +3,8 @@
 const Homey = require('homey');
 const Domoticz = require('domoticz');
 
+
+
 const CAPABILITY_TARGET_TEMPERATURE = 'target_temperature';
 const CAPABILITY_MEASURE_TEMPERATURE = 'measure_temperature';
 const CAPABILITY_MEASURE_POWER = 'measure_power';
@@ -30,12 +32,20 @@ const POLL_INTERVAL = 1000 * 10; // 10 seconds
 
 class DomoticzDriver extends Homey.Driver{
 
+    constructor(...args) {
+        super(...args);
+        this.deviceList = new Set(); // Initialize the deviceList variable
+      }
+
 
     async onInit(){
         console.log("Initialize driver");
 
         //this.onPollInterval = setInterval(this.onPoll.bind(this), POLL_INTERVAL);
+        this.domoticz = Domoticz.fromSettings(this.homey)
 
+        const domoticz = new Domoticz('homey','homey123!','192.168.1.21','8080'); // Create an instance of the Domoticz class
+        
         this.initInterval();
     }
 
@@ -47,9 +57,11 @@ class DomoticzDriver extends Homey.Driver{
         }, 10000); // Interval set to 10 seconds (10000 milliseconds)
     }
 
-    onIntervalTick() {
+    async onIntervalTick() {
         const domoticz = this.getDomoticz(); // Store the reference to the initialized Domoticz object
-        domoticz.getDeviceData(null)
+        //this.domoticz = Domoticz.fromSettings(this.homey);
+
+        await domoticz.getDeviceData(null)
             .then((result) => {
                 this.emit("domoticzdata", result);
             })
@@ -123,23 +135,24 @@ class DomoticzDriver extends Homey.Driver{
         if(this.domoticz == null){
             console.log('Initialize new domoticz class');
             this.domoticz = Domoticz.fromSettings();
+            this.domoticz = this.homey.settings.get("domotics_config");
         }
         return this.domoticz;
     }
 
     onPair(socket){
-        socket.on('start',(data,callback)=>{
+        socket.showView('start',(data,callback)=>{
             console.log("Start pairing. Retrieve connect settings");
 
             this.retrieveSettings(data,callback);
         });
 
-        socket.on('validate',(data,callback)=>{
+        socket.nextView('validate',(data,callback)=>{
             console.log("Validate new connection settings");
            this.validateSettings(data,callback);
         });
 
-        socket.on('list_devices',(data,callback)=>{
+        socket.setHandler('list_devices',(data,callback)=>{
             console.log("List new devices");
             this.onPairListDevices(data,callback);
         });
@@ -156,7 +169,8 @@ class DomoticzDriver extends Homey.Driver{
 
             }
             console.log("save settings");
-            this.saveSettings(data);
+            this.homey.settings.set('domotics_config',data);
+            //this.saveSettings(data);
             callback(null,'OK');
         }).catch((error)=>{
             console.log("Credentials are not correct or domoticz is not reachable!");
@@ -168,8 +182,20 @@ class DomoticzDriver extends Homey.Driver{
         this.homey.settings.set('domotics_config',data);
     }
 
+    fromSettings(){
+        
+        console.log("Retrieve connector from settings");
+        let settings = this.homey.settings.get("domotics_config");
+        console.log(settings);
+        if(settings) {
+            return new Domoticz(settings.username, settings.password, settings.host, settings.port);
+        }
+        return null;
+    }
 
-    static retrieveSettings(data,callback){
+
+    retrieveSettings(data,callback){
+        this.homey = homey;
         console.log("Retrieve current settings from Homey store");
         let settings = this.homey.settings.get('domotics_config');
         if(settings === undefined || settings === null){
@@ -184,7 +210,7 @@ class DomoticzDriver extends Homey.Driver{
         callback(null,settings);
     }
 
-    static getDeviceClass(deviceEntry){
+    getDeviceClass(deviceEntry){
         switch(deviceEntry.Type){
             case 'Humidity':
                 return 'sensor';
@@ -197,7 +223,7 @@ class DomoticzDriver extends Homey.Driver{
         }
     }
 
-    static getDeviceCapabilities(deviceEntry){
+    getDeviceCapabilities(deviceEntry){
         let capabilities = new Set();
         console.log("Get capabilities for device");
         console.log(deviceEntry.idx);
@@ -284,57 +310,56 @@ class DomoticzDriver extends Homey.Driver{
         return capabilities;
     }
 
-    onPairListDevices( data, callback ) {
+    onPairListDevices(data, callback) {
         console.log("On pair list devices");
-
+      
         let domoticz = this.getDomoticz();
-        if(!domoticz){
-            callback(false,"kapot");
-            return;
+      
+        if (!domoticz) {
+          callback(new Error("Failed to initialize Domoticz"), null);
+          return;
         }
-
-
-
-
-        domoticz.findDevice(null,null,null).then((result)=>{
+      
+        domoticz
+          .findDevice(null, null, null)
+          .then((result) => {
             let devices = [];
-
-            result.forEach((element)=>{
-                if(!this.deviceList.has(element.idx)){
-
-
-                        let capabilities = this.getDeviceCapabilities(element);
-                        let deviceClass = this.getDeviceClass(element);
-                        console.log(capabilities);
-                        console.log(deviceClass);
-
-                        if(capabilities.size > 0 && deviceClass != null){
-                            devices.push({
-                                "name": element.Name || DEVICE_DEFAULT_NAME,
-                                "class": deviceClass,
-                                "capabilities": Array.from(capabilities),
-                                "data": {
-                                    id: this.guid(),
-                                    idx: element.idx,
-                                }
-                            });
-                        }else{
-                            console.log("Could not determine device class or capabilities for device");
-                            console.log(element);
-                        }
-
-
+      
+            result.forEach((element) => {
+              if (!this.deviceList.has(element.idx)) {
+                let capabilities = this.getDeviceCapabilities(element);
+                let deviceClass = this.getDeviceClass(element);
+                console.log(capabilities);
+                console.log(deviceClass);
+      
+                if (capabilities.size > 0 && deviceClass != null) {
+                  devices.push({
+                    name: element.Name || DEVICE_DEFAULT_NAME,
+                    class: deviceClass,
+                    capabilities: Array.from(capabilities),
+                    data: {
+                      id: this.guid(),
+                      idx: element.idx,
+                    },
+                  });
+                } else {
+                  console.log("Could not determine device class or capabilities for device");
+                  console.log(element);
                 }
+              }
             });
+      
             console.log("Devices found: ");
             console.log(devices.length);
-            callback(null,devices);
-        }).catch((error)=>{
+            callback(null, devices);
+          })
+          .catch((error) => {
             console.log("Error while retrieving devicelist");
             console.log(error);
-           callback(false,error);
-        });
-    }
+            callback(error, null);
+          });
+      }
+      
 
     guid() {
         function s4() {

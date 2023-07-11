@@ -39,8 +39,8 @@ class DomoticzDevice extends Homey.Device{
     }
 
     _updateInternalState(data){
-        Homey.app.doLog("Update internal state of device");
-        Homey.app.doLog(this.getData().idx);
+        console.log("Update internal state of device");
+        console.log(this.getData().idx);
         this.getCapabilities().forEach((element)=>{
             let oldValue = this.getCapabilityValue(element);
             let value = null;
@@ -107,15 +107,15 @@ class DomoticzDevice extends Homey.Device{
                     break;
             }
             if(value !== null && value !== oldValue){
-                Homey.app.doLog('Setting capability value');
-                Homey.app.doLog('Value before: '+oldValue);
-                Homey.app.doLog('Value after: '+value);
+                console.log('Setting capability value');
+                console.log('Value before: '+oldValue);
+                console.log('Value after: '+value);
                 this.setCapabilityValue(element,value,(err)=>{
                     if(err){
-                        Homey.app.doError(' ----- Unsuccessful updating capability ------');
-                        Homey.app.doError(element);
-                        Homey.app.doError(value);
-                        Homey.app.doError(err);
+                        console.log(' ----- Unsuccessful updating capability ------');
+                        console.log(element);
+                        console.log(value);
+                        console.log(err);
                     }
                 });
             }
@@ -153,17 +153,17 @@ class DomoticzDevice extends Homey.Device{
 
     onCapabilityChange(values,opts){
         // noinspection JSUnresolvedVariable
-        Homey.app.doLog("Capabilities have changed");
+        console.log("Capabilities have changed");
         // noinspection JSUnresolvedVariable
-        Homey.app.doLog("-----");
+        console.log("-----");
         // noinspection JSUnresolvedVariable
-        Homey.app.doLog(values);
+        console.log(values);
         // noinspection JSUnresolvedVariable
-        Homey.app.doLog("-----");
+        console.log("-----");
         // noinspection JSUnresolvedVariable
-        Homey.app.doLog(opts);
+        console.log(opts);
         // noinspection JSUnresolvedVariable
-        Homey.app.doLog("-----");
+        console.log("-----");
         // noinspection JSUnresolvedVariable
         if(this.getDriver().updateExternalState(values,this)){
             return Promise.resolve(true);
